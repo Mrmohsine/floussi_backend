@@ -1,0 +1,212 @@
+// Paycheck — Prisma schema
+// Money is stored as Decimal(12,2) — never use Float for currency.
+// Dates are UTC; UI converts to user's local zone.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // For local dev we run on SQLite (zero install). Switch to "postgresql"
+  // for production and add back the @db.Decimal(12,2) native attributes.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// "Enum" values — kept as constants here for reference. SQLite doesn't
+// support Prisma enums, so we store these as plain String columns and
+// rely on the Zod validators at the route boundary to enforce the set.
+//
+//   PaySchedule:        WEEKLY | BIWEEKLY | TWICE_MONTHLY | MONTHLY
+//   PaymentMethod:      CASH | DEBIT_CARD | CREDIT_CARD | BANK_TRANSFER
+//   ExpenseType:        FIXED_BILL | VARIABLE
+//   DebtType:           CREDIT_CARD | STUDENT_LOAN | AUTO_LOAN |
+//                       PERSONAL_LOAN | MORTGAGE | MEDICAL | OTHER
+//   SavingsGoalType:    EMERGENCY_FUND | VACATION | CAR_DOWN_PAYMENT |
+//                       HOUSE_DOWN_PAYMENT | DEBT_PAYOFF | OTHER
+//   RecurringFrequency: MONTHLY | WEEKLY | BIWEEKLY | YEARLY
+// ──────────────────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────────────
+// User
+// ──────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  currency     String      @default("USD")
+  paySchedule  String      @default("BIWEEKLY")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  budgetMonths   BudgetMonth[]
+  categories     Category[]
+  expenses       Expense[]
+  incomes        Income[]
+  savingsGoals   SavingsGoal[]
+  debts          Debt[]
+  recurringBills RecurringBill[]
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Categories — system defaults + user-created
+// ──────────────────────────────────────────────────────────────────────
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String   // emoji or icon key e.g. "home", "fork-knife"
+  color     String   // hex e.g. "#10B981"
+  isSystem  Boolean  @default(false)
+  userId    String?  // null when isSystem=true
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  expenses       Expense[]
+  recurringBills RecurringBill[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// BudgetMonth — one per user per (year, month)
+// ──────────────────────────────────────────────────────────────────────
+
+model BudgetMonth {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year          Int
+  month         Int      // 1–12
+  plannedIncome Decimal
+  savingsTarget Decimal  @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  incomes  Income[]
+  expenses Expense[]
+
+  @@unique([userId, year, month])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Income — actual paycheck deposits
+// ──────────────────────────────────────────────────────────────────────
+
+model Income {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetMonthId String?
+  budgetMonth   BudgetMonth? @relation(fields: [budgetMonthId], references: [id], onDelete: SetNull)
+  amount        Decimal
+  source        String      // "Employer", "Side gig", etc.
+  receivedAt    DateTime
+  note          String?
+  createdAt     DateTime    @default(now())
+
+  @@index([userId, receivedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Expense
+// ──────────────────────────────────────────────────────────────────────
+
+model Expense {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      Category      @relation(fields: [categoryId], references: [id])
+  budgetMonthId String?
+  budgetMonth   BudgetMonth?  @relation(fields: [budgetMonthId], references: [id], onDelete: SetNull)
+  amount        Decimal
+  date          DateTime
+  note          String?
+  paymentMethod String        @default("DEBIT_CARD")
+  type          String        @default("VARIABLE")
+  // If created from a recurring bill template
+  recurringBillId String?
+  recurringBill   RecurringBill? @relation(fields: [recurringBillId], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId, date])
+  @@index([categoryId])
+  @@index([budgetMonthId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Savings goal
+// ──────────────────────────────────────────────────────────────────────
+
+model SavingsGoal {
+  id           String          @id @default(cuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  type         String          @default("OTHER")
+  targetAmount Decimal
+  savedAmount  Decimal         @default(0)
+  targetDate   DateTime?
+  icon         String          @default("piggy-bank")
+  color        String          @default("#10B981")
+  archivedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Debt
+// ──────────────────────────────────────────────────────────────────────
+
+model Debt {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  type            String   @default("OTHER")
+  totalAmount     Decimal
+  remainingAmount Decimal
+  interestRate    Decimal  @default(0) // APR percent, e.g. 19.990
+  minimumPayment  Decimal
+  dueDay          Int? // 1–31
+  payoffDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Recurring bill (template — produces Expenses each month)
+// ──────────────────────────────────────────────────────────────────────
+
+model RecurringBill {
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category           @relation(fields: [categoryId], references: [id])
+  name       String
+  amount     Decimal
+  frequency  String             @default("MONTHLY")
+  dueDay     Int // 1–31, day of month
+  active     Boolean            @default(true)
+  paymentMethod String          @default("DEBIT_CARD")
+  note       String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  expenses Expense[]
+
+  @@index([userId])
+}
