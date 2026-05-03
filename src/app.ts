@@ -15,6 +15,7 @@ import recurringRoutes from './modules/recurring/recurring.routes';
 import insightsRoutes from './modules/insights/insights.routes';
 import chatRoutes from './modules/chat/chat.routes';
 import billingRoutes from './modules/billing/billing.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
 import { errorHandler, notFoundHandler } from './middleware/error';
 
 export const app = express();
@@ -38,6 +39,7 @@ app.use('/api/recurring-bills', recurringRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

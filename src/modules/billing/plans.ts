@@ -17,8 +17,8 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   FREE: {
-    expensesPerMonth: 3,
-    aiMessagesPerMonth: 1,
+    expensesPerMonth: 20,
+    aiMessagesPerMonth: 3,
     savingsGoals: 1,
     debts: 0,
     recurringBills: 0,
@@ -29,22 +29,22 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
   PRO: {
     expensesPerMonth: null,
-    aiMessagesPerMonth: 30,
-    savingsGoals: 3,
-    debts: 1,
-    recurringBills: 3,
-    historyMonths: 3,
+    aiMessagesPerMonth: 75,
+    savingsGoals: 5,
+    debts: 3,
+    recurringBills: 10,
+    historyMonths: 12,
     conversationHistory: false,
     csvExport: false,
     weeklyAiSummary: false,
   },
   PREMIUM: {
     expensesPerMonth: null,
-    aiMessagesPerMonth: null,
+    aiMessagesPerMonth: 300,
     savingsGoals: null,
     debts: null,
     recurringBills: null,
-    historyMonths: 12,
+    historyMonths: 60,
     conversationHistory: true,
     csvExport: true,
     weeklyAiSummary: true,
@@ -53,8 +53,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 
 export const PLAN_PRICES: Record<Plan, number> = {
   FREE: 0,
-  PRO: 5,
-  PREMIUM: 10,
+  PRO: 6.99,
+  PREMIUM: 12.99,
 };
 
 export const isPlan = (s: string): s is Plan =>
