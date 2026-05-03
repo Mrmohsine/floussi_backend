@@ -7,6 +7,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { toDecimal, toNumber } from '../../utils/money';
 import { notFound } from '../../utils/errors';
+import { assertCanCreateSavingsGoal } from '../billing/enforce';
 
 const router = Router();
 router.use(requireAuth);
@@ -60,6 +61,7 @@ router.post(
   '/',
   validate(createSchema),
   asyncHandler(async (req, res) => {
+    await assertCanCreateSavingsGoal(req.userId!);
     const g = await prisma.savingsGoal.create({
       data: {
         ...req.body,

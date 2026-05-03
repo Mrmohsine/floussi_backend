@@ -10,12 +10,14 @@ const publicUser = (u: {
   name: string;
   currency: string;
   paySchedule: string;
+  plan: string;
 }) => ({
   id: u.id,
   email: u.email,
   name: u.name,
   currency: u.currency,
   paySchedule: u.paySchedule,
+  plan: u.plan,
 });
 
 export async function register(input: RegisterInput) {

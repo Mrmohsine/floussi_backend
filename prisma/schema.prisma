@@ -39,6 +39,8 @@ model User {
   name         String
   currency     String      @default("USD")
   paySchedule  String      @default("BIWEEKLY")
+  plan         String      @default("FREE") // FREE | PRO | PREMIUM
+  planSince    DateTime    @default(now())
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -49,6 +51,35 @@ model User {
   savingsGoals   SavingsGoal[]
   debts          Debt[]
   recurringBills RecurringBill[]
+  conversations  Conversation[]
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Chat — saved conversations with the AI money coach
+// ──────────────────────────────────────────────────────────────────────
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @default("New chat")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" | "assistant"
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

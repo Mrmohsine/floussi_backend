@@ -8,6 +8,7 @@ import {
   updateExpenseSchema,
 } from './expenses.schema';
 import * as service from './expenses.service';
+import { assertCanCreateExpense } from '../billing/enforce';
 
 const router = Router();
 router.use(requireAuth);
@@ -24,6 +25,7 @@ router.post(
   '/',
   validate(createExpenseSchema),
   asyncHandler(async (req, res) => {
+    await assertCanCreateExpense(req.userId!);
     res.status(201).json(await service.createExpense(req.userId!, req.body));
   }),
 );

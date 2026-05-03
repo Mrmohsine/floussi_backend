@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { upsertBudgetSchema } from './budgets.schema';
 import * as service from './budgets.service';
+import { assertWithinHistoryWindow, getUserPlan } from '../billing/enforce';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,6 +20,8 @@ router.get(
   validate(summaryQuery, 'query'),
   asyncHandler(async (req, res) => {
     const { year, month } = req.query as unknown as z.infer<typeof summaryQuery>;
+    const plan = await getUserPlan(req.userId!);
+    assertWithinHistoryWindow(plan, year, month);
     res.json(await service.getBudgetSummary(req.userId!, year, month));
   }),
 );

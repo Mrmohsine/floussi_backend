@@ -6,6 +6,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { toDecimal, toNumber } from '../../utils/money';
 import { badRequest, notFound } from '../../utils/errors';
+import { assertCanCreateRecurring } from '../billing/enforce';
 
 const router = Router();
 router.use(requireAuth);
@@ -45,6 +46,7 @@ router.post(
   '/',
   validate(createSchema),
   asyncHandler(async (req, res) => {
+    await assertCanCreateRecurring(req.userId!);
     const cat = await prisma.category.findFirst({
       where: {
         id: req.body.categoryId,

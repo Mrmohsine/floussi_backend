@@ -75,6 +75,7 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
       fixedSpent: 0,
       variableSpent: 0,
       remaining: 0,
+      incomes: [] as Array<{ id: string; source: string; amount: number; receivedAt: string; note: string | null }>,
       byCategory: [] as Array<{ categoryId: string; name: string; icon: string; color: string; total: number }>,
       byWeek: [] as Array<{ week: number; total: number }>,
       upcomingBills: [] as Array<{ id: string; name: string; amount: number; dueDay: number }>,
@@ -143,6 +144,17 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     .sort((a, b) => a.dueDay - b.dueDay)
     .slice(0, 5);
 
+  const incomes = budget.incomes
+    .slice()
+    .sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime())
+    .map((i) => ({
+      id: i.id,
+      source: i.source,
+      amount: toNumber(i.amount),
+      receivedAt: i.receivedAt.toISOString(),
+      note: i.note,
+    }));
+
   return {
     exists: true as const,
     id: budget.id,
@@ -155,6 +167,7 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     fixedSpent: toNumber(fixedSpent),
     variableSpent: toNumber(variableSpent),
     remaining: toNumber(remaining),
+    incomes,
     byCategory,
     byWeek,
     upcomingBills,

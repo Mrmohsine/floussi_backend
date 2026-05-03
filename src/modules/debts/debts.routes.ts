@@ -7,6 +7,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { toDecimal, toNumber } from '../../utils/money';
 import { notFound } from '../../utils/errors';
+import { assertCanCreateDebt } from '../billing/enforce';
 
 const router = Router();
 router.use(requireAuth);
@@ -64,6 +65,7 @@ router.post(
   '/',
   validate(createSchema),
   asyncHandler(async (req, res) => {
+    await assertCanCreateDebt(req.userId!);
     const d = await prisma.debt.create({
       data: {
         ...req.body,

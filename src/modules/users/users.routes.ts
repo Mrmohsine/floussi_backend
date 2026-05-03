@@ -21,7 +21,7 @@ router.patch(
     const user = await prisma.user.update({
       where: { id: req.userId! },
       data: req.body,
-      select: { id: true, name: true, email: true, currency: true, paySchedule: true },
+      select: { id: true, name: true, email: true, currency: true, paySchedule: true, plan: true },
     });
     res.json(user);
   }),
