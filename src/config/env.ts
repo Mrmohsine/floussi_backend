@@ -16,6 +16,11 @@ const schema = z.object({
   // Optional — chat endpoint returns a friendly 503 if the key is missing.
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-4.1-mini'),
+  // Optional — billing endpoints return 503 if these are missing.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Used to build success/cancel URLs that deep-link back into the app.
+  APP_DEEP_LINK_SCHEME: z.string().default('paycheck'),
 });
 
 const parsed = schema.safeParse(process.env);
