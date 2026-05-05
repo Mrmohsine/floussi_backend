@@ -1,10 +1,15 @@
 import { config } from 'dotenv';
 import { z } from 'zod';
 
+const runtimeNodeEnv = process.env.NODE_ENV;
+
 // override:true so values in our backend/.env file beat any system-wide env
 // vars the user might have set (e.g. a personal OPENAI_API_KEY for another
 // project would otherwise win and pollute this app's chat).
 config({ override: true });
+if (runtimeNodeEnv === 'test') {
+  process.env.NODE_ENV = 'test';
+}
 
 const schema = z.object({
   // Accept any non-empty string so file:./dev.db (SQLite) is allowed too.
@@ -13,6 +18,7 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  CORS_ORIGINS: z.string().default(''),
   // Optional — chat endpoint returns a friendly 503 if the key is missing.
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-4.1-mini'),

@@ -17,15 +17,49 @@ import chatRoutes from './modules/chat/chat.routes';
 import billingRoutes from './modules/billing/billing.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import { errorHandler, notFoundHandler } from './middleware/error';
+import { rateLimit } from './middleware/rateLimit';
+import { env } from './config/env';
 
 export const app = express();
 
+const allowedOrigins = env.CORS_ORIGINS
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Not allowed by CORS'));
+  },
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+app.use('/api/auth/login', rateLimit({
+  keyPrefix: 'auth-login',
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  message: 'Too many login attempts. Try again soon.',
+}));
+app.use('/api/auth/register', rateLimit({
+  keyPrefix: 'auth-register',
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Too many registration attempts. Try again later.',
+}));
+app.use('/api/chat', rateLimit({
+  keyPrefix: 'chat',
+  windowMs: 60 * 1000,
+  max: 12,
+  message: 'Too many AI requests. Try again in a minute.',
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

@@ -1,5 +1,8 @@
+import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { env } from '../../config/env';
 import { toNumber } from '../../utils/money';
 
 export type SmartNotificationTone = 'warning' | 'positive' | 'info' | 'alert';
@@ -12,7 +15,13 @@ export interface SmartNotification {
   actionLabel?: string;
   priority: number;
   createdAt: string;
+  readAt: string | null;
 }
+
+type GeneratedSmartNotification = Omit<SmartNotification, 'createdAt' | 'readAt'>;
+type CandidateSmartNotification = GeneratedSmartNotification & { fingerprint: string };
+
+const MAX_SMART_NOTIFICATIONS_PER_MONTH = 8;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -72,11 +81,65 @@ function pct(n: number) {
   return `${Math.round(n * 100)}%`;
 }
 
-export async function generateSmartNotifications(
+const monthKey = (year: number, month: number) =>
+  `${year}-${String(month).padStart(2, '0')}`;
+
+let _client: OpenAI | null = null;
+function getAiClient(): OpenAI | null {
+  if (!env.OPENAI_API_KEY || env.NODE_ENV === 'test') return null;
+  if (!_client) _client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  return _client;
+}
+
+function notificationFingerprint(n: GeneratedSmartNotification) {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      id: n.id,
+      tone: n.tone,
+      title: n.title,
+      body: n.body,
+      actionLabel: n.actionLabel ?? null,
+      priority: n.priority,
+    }))
+    .digest('hex');
+}
+
+function withFingerprints(
+  generated: GeneratedSmartNotification[],
+): CandidateSmartNotification[] {
+  return generated.map((n) => ({
+    ...n,
+    fingerprint: notificationFingerprint(n),
+  }));
+}
+
+function serializeNotification(n: {
+  id: string;
+  tone: string;
+  title: string;
+  body: string;
+  actionLabel: string | null;
+  priority: number;
+  createdAt: Date;
+  readAt: Date | null;
+}): SmartNotification {
+  return {
+    id: n.id,
+    tone: n.tone as SmartNotificationTone,
+    title: n.title,
+    body: n.body,
+    actionLabel: n.actionLabel ?? undefined,
+    priority: n.priority,
+    createdAt: n.createdAt.toISOString(),
+    readAt: n.readAt?.toISOString() ?? null,
+  };
+}
+
+async function generateSmartNotifications(
   userId: string,
   year: number,
   month: number,
-): Promise<SmartNotification[]> {
+): Promise<GeneratedSmartNotification[]> {
   const now = new Date();
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -103,9 +166,9 @@ export async function generateSmartNotifications(
     }),
   ]);
 
-  const out: SmartNotification[] = [];
-  const push = (n: Omit<SmartNotification, 'createdAt'>) => {
-    out.push({ ...n, createdAt: now.toISOString() });
+  const out: GeneratedSmartNotification[] = [];
+  const push = (n: GeneratedSmartNotification) => {
+    out.push(n);
   };
 
   for (const goal of goals) {
@@ -219,7 +282,9 @@ export async function generateSmartNotifications(
       actionLabel: 'Set budget',
       priority: 80,
     });
-    return out;
+    return out
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, MAX_SMART_NOTIFICATIONS_PER_MONTH);
   }
 
   const income = budget.incomes.length
@@ -313,5 +378,220 @@ export async function generateSmartNotifications(
 
   return out
     .sort((a, b) => b.priority - a.priority)
-    .slice(0, 8);
+    .slice(0, MAX_SMART_NOTIFICATIONS_PER_MONTH);
+}
+
+type AiNotificationPayload = {
+  id: string;
+  tone?: SmartNotificationTone;
+  title?: string;
+  body?: string;
+  actionLabel?: string | null;
+  priority?: number;
+};
+
+function clampText(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength).trim() : trimmed;
+}
+
+function parseAiNotificationJson(content: string): AiNotificationPayload[] {
+  const parsed = JSON.parse(content) as { items?: AiNotificationPayload[] };
+  return Array.isArray(parsed.items) ? parsed.items : [];
+}
+
+function mergeAiNotifications(
+  candidates: CandidateSmartNotification[],
+  aiItems: AiNotificationPayload[],
+) {
+  const byId = new Map(candidates.map((n) => [n.id, n]));
+  const merged: CandidateSmartNotification[] = [];
+
+  for (const item of aiItems) {
+    const base = byId.get(item.id);
+    if (!base) continue;
+    byId.delete(item.id);
+    const priority =
+      typeof item.priority === 'number' && Number.isFinite(item.priority)
+        ? Math.max(0, Math.min(100, Math.round(item.priority)))
+        : base.priority;
+    const tone =
+      item.tone && ['positive', 'info', 'warning', 'alert'].includes(item.tone)
+        ? item.tone
+        : base.tone;
+
+    merged.push({
+      ...base,
+      tone,
+      title: clampText(item.title, 90) ?? base.title,
+      body: clampText(item.body, 220) ?? base.body,
+      actionLabel: clampText(item.actionLabel, 24) ?? base.actionLabel,
+      priority,
+    });
+  }
+
+  merged.push(...byId.values());
+  return merged
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, MAX_SMART_NOTIFICATIONS_PER_MONTH);
+}
+
+async function enhanceNotificationsWithAi(
+  candidates: CandidateSmartNotification[],
+  cached: Array<{
+    sourceId: string;
+    fingerprint: string | null;
+    aiEnhancedAt: Date | null;
+  }>,
+) {
+  const fallback = candidates
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, MAX_SMART_NOTIFICATIONS_PER_MONTH);
+  const cachedBySource = new Map(cached.map((n) => [n.sourceId, n]));
+  const canReuseExistingAi = candidates.every((n) => {
+    const existing = cachedBySource.get(n.id);
+    return existing?.aiEnhancedAt && existing.fingerprint === n.fingerprint;
+  });
+  if (canReuseExistingAi) {
+    return { notifications: fallback, enhanced: false, reuseExisting: true };
+  }
+
+  const client = getAiClient();
+  if (!client || candidates.length === 0) {
+    return { notifications: fallback, enhanced: false, reuseExisting: false };
+  }
+
+  try {
+    const response = await client.chat.completions.create({
+      model: env.OPENAI_MODEL,
+      max_tokens: 900,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You rewrite and rank personal-finance notification candidates. Rules already detected the risks; do not invent new facts or new ids. Return strict JSON only: {"items":[{"id":"...","tone":"positive|info|warning|alert","title":"...","body":"...","actionLabel":"...","priority":0-100}]}. Keep titles under 70 chars, bodies under 180 chars, warm but direct, no markdown.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            maxItems: MAX_SMART_NOTIFICATIONS_PER_MONTH,
+            candidates: candidates.map((n) => ({
+              id: n.id,
+              tone: n.tone,
+              title: n.title,
+              body: n.body,
+              actionLabel: n.actionLabel ?? null,
+              priority: n.priority,
+            })),
+          }),
+        },
+      ],
+    });
+    const text = response.choices[0]?.message?.content?.trim() ?? '';
+    if (!text) return { notifications: fallback, enhanced: false, reuseExisting: false };
+    return {
+      notifications: mergeAiNotifications(candidates, parseAiNotificationJson(text)),
+      enhanced: true,
+      reuseExisting: false,
+    };
+  } catch {
+    return { notifications: fallback, enhanced: false, reuseExisting: false };
+  }
+}
+
+export async function listSmartNotifications(
+  userId: string,
+  year: number,
+  month: number,
+): Promise<SmartNotification[]> {
+  const key = monthKey(year, month);
+  const generated = withFingerprints(await generateSmartNotifications(userId, year, month));
+  const activeSourceIds = generated.map((n) => n.id);
+  await prisma.notification.deleteMany({
+    where: {
+      userId,
+      monthKey: key,
+      ...(activeSourceIds.length > 0 ? { sourceId: { notIn: activeSourceIds } } : {}),
+    },
+  });
+  const existing = await prisma.notification.findMany({
+    where: { userId, monthKey: key },
+    select: { sourceId: true, fingerprint: true, aiEnhancedAt: true },
+  });
+  const { notifications, enhanced, reuseExisting } = await enhanceNotificationsWithAi(
+    generated,
+    existing,
+  );
+  const enhancedAt = enhanced ? new Date() : undefined;
+
+  if (!reuseExisting) {
+    for (const n of notifications) {
+      await prisma.notification.upsert({
+        where: {
+          userId_monthKey_sourceId: {
+            userId,
+            monthKey: key,
+            sourceId: n.id,
+          },
+        },
+        update: {
+          tone: n.tone,
+          title: n.title,
+          body: n.body,
+          actionLabel: n.actionLabel ?? null,
+          priority: n.priority,
+          fingerprint: n.fingerprint,
+          aiEnhancedAt: enhancedAt ?? null,
+        },
+        create: {
+          userId,
+          monthKey: key,
+          sourceId: n.id,
+          tone: n.tone,
+          title: n.title,
+          body: n.body,
+          actionLabel: n.actionLabel ?? null,
+          priority: n.priority,
+          fingerprint: n.fingerprint,
+          aiEnhancedAt: enhancedAt ?? null,
+        },
+      });
+    }
+  }
+
+  const saved = await prisma.notification.findMany({
+    where: { userId, monthKey: key },
+    orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+    take: MAX_SMART_NOTIFICATIONS_PER_MONTH,
+  });
+
+  return saved.map(serializeNotification);
+}
+
+export async function markNotificationRead(userId: string, id: string) {
+  const existing = await prisma.notification.findFirst({ where: { id, userId } });
+  if (!existing) return null;
+  const updated = await prisma.notification.update({
+    where: { id },
+    data: { readAt: existing.readAt ?? new Date() },
+  });
+  return serializeNotification(updated);
+}
+
+export async function markMonthNotificationsRead(
+  userId: string,
+  year: number,
+  month: number,
+) {
+  await prisma.notification.updateMany({
+    where: {
+      userId,
+      monthKey: monthKey(year, month),
+      readAt: null,
+    },
+    data: { readAt: new Date() },
+  });
 }

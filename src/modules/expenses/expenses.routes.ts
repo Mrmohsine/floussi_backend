@@ -17,7 +17,7 @@ router.get(
   '/',
   validate(listExpensesQuery, 'query'),
   asyncHandler(async (req, res) => {
-    res.json(await service.listExpenses(req.userId!, req.query as any));
+    res.json(await service.listExpenses(req.userId!, req.query as unknown as service.ListParams));
   }),
 );
 

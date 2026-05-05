@@ -52,6 +52,7 @@ model User {
   debts          Debt[]
   recurringBills RecurringBill[]
   conversations  Conversation[]
+  notifications  Notification[]
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -80,6 +81,32 @@ model ChatMessage {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Notifications — persisted smart nudges generated from user data
+// ──────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthKey    String    // YYYY-MM
+  sourceId    String    // stable generator id, e.g. debt_high_apr_<debtId>
+  tone        String    // positive | info | warning | alert
+  title       String
+  body        String
+  actionLabel String?
+  priority    Int
+  fingerprint String?
+  aiEnhancedAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, monthKey, sourceId])
+  @@index([userId, monthKey, readAt])
+  @@index([userId, createdAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

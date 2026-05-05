@@ -12,6 +12,8 @@ export const validate =
       return next(badRequest('Validation failed', result.error.flatten()));
     }
     // Replace with parsed (coerced) data
-    (req as any)[source] = result.data;
+    if (source === 'body') req.body = result.data;
+    else if (source === 'query') req.query = result.data;
+    else req.params = result.data;
     next();
   };
