@@ -2,7 +2,16 @@ import { Router } from 'express';
 import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { loginSchema, registerSchema } from './auth.schema';
+import {
+  changePasswordSchema,
+  deleteAccountSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+} from './auth.schema';
 import * as service from './auth.service';
 
 const router = Router();
@@ -35,5 +44,82 @@ router.get(
 
 // Logout is client-side (drop the token). Stub kept for symmetry.
 router.post('/logout', requireAuth, (_req, res) => res.json({ ok: true }));
+
+// ── Email verification ────────────────────────────────────────────
+router.post(
+  '/verify-email',
+  requireAuth,
+  validate(verifyEmailSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.verifyEmail(req.userId!, req.body.code));
+  }),
+);
+
+router.post(
+  '/resend-verification',
+  validate(resendVerificationSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.resendVerification(req.body.email));
+  }),
+);
+
+// ── Password reset ────────────────────────────────────────────────
+router.post(
+  '/forgot-password',
+  validate(forgotPasswordSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.forgotPassword(req.body.email));
+  }),
+);
+
+router.post(
+  '/reset-password',
+  validate(resetPasswordSchema),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await service.resetPassword(req.body.email, req.body.token, req.body.password),
+    );
+  }),
+);
+
+// ── Change password (authenticated) ───────────────────────────────
+router.post(
+  '/change-password',
+  requireAuth,
+  validate(changePasswordSchema),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await service.changePassword(
+        req.userId!,
+        req.body.currentPassword,
+        req.body.newPassword,
+      ),
+    );
+  }),
+);
+
+// ── Delete account ────────────────────────────────────────────────
+router.delete(
+  '/account',
+  requireAuth,
+  validate(deleteAccountSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.deleteAccount(req.userId!, req.body.password));
+  }),
+);
+
+// ── Export data ───────────────────────────────────────────────────
+router.get(
+  '/export',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const data = await service.exportData(req.userId!);
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="paycheck-export.json"',
+    );
+    res.json(data);
+  }),
+);
 
 export default router;

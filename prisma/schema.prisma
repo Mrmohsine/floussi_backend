@@ -33,16 +33,18 @@ datasource db {
 // ──────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String
-  name         String
-  currency     String      @default("USD")
-  paySchedule  String      @default("BIWEEKLY")
-  plan         String      @default("FREE") // FREE | PRO | PREMIUM
-  planSince    DateTime    @default(now())
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String
+  currency        String    @default("USD")
+  paySchedule     String    @default("BIWEEKLY")
+  plan            String    @default("FREE") // FREE | PRO | PREMIUM
+  planSince       DateTime  @default(now())
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   budgetMonths   BudgetMonth[]
   categories     Category[]
@@ -53,6 +55,23 @@ model User {
   recurringBills RecurringBill[]
   conversations  Conversation[]
   notifications  Notification[]
+  oneTimeCodes   OneTimeCode[]
+}
+
+// One-time codes for email verification + password reset.
+// kind = "EMAIL_VERIFY" | "PASSWORD_RESET". 6-digit numeric.
+model OneTimeCode {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String
+  code       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, kind])
+  @@index([expiresAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

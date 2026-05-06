@@ -27,6 +27,9 @@ const schema = z.object({
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   // Used to build success/cancel URLs that deep-link back into the app.
   APP_DEEP_LINK_SCHEME: z.string().default('paycheck'),
+  // Optional — if missing, OTP codes log to stdout instead of being emailed.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Paycheck <onboarding@resend.dev>'),
 });
 
 const parsed = schema.safeParse(process.env);
