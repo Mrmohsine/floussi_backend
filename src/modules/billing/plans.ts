@@ -29,7 +29,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
   PRO: {
     expensesPerMonth: null,
-    aiMessagesPerMonth: 75,
+    aiMessagesPerMonth: 15,
     savingsGoals: 5,
     debts: 3,
     recurringBills: 10,
@@ -40,7 +40,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
   PREMIUM: {
     expensesPerMonth: null,
-    aiMessagesPerMonth: 300,
+    aiMessagesPerMonth: null,
     savingsGoals: null,
     debts: null,
     recurringBills: null,

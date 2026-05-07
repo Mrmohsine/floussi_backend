@@ -1,13 +1,20 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { prisma } from '../../config/prisma';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { forbidden, notFound } from '../../utils/errors';
-import { chat } from './chat.service';
+import { badRequest, forbidden, notFound } from '../../utils/errors';
+import { chat, transcribe } from './chat.service';
 import { assertCanSendAiMessage, getUserPlan } from '../billing/enforce';
 import { PLAN_LIMITS } from '../billing/plans';
+
+// Whisper accepts up to 25 MB. We cap at 10 MB to keep mobile uploads sane.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -121,6 +128,21 @@ router.delete(
     if (!existing) throw notFound();
     await prisma.conversation.delete({ where: { id: req.params.id } });
     res.status(204).end();
+  }),
+);
+
+// Speech-to-text. Accepts a multipart upload with field name `audio`.
+// Gated on the user's AI message quota even though no chat reply is sent —
+// transcription is the AI feature being consumed.
+router.post(
+  '/transcribe',
+  upload.single('audio'),
+  asyncHandler(async (req, res) => {
+    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    if (!file) throw badRequest('No audio file uploaded.');
+    await assertCanSendAiMessage(req.userId!);
+    const result = await transcribe(file.buffer, file.originalname || 'audio.m4a', file.mimetype);
+    res.json(result);
   }),
 );
 

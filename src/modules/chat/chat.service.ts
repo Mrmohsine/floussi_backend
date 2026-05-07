@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
@@ -207,4 +207,21 @@ export async function chat(
       text ||
       "I'm not sure how to answer that — try asking about your budget, spending, or goals.",
   };
+}
+
+// Speech-to-text via Whisper. Accepts the raw audio buffer (m4a, mp3, wav,
+// webm, etc. — whatever the mobile recorder produced) plus the original
+// filename so OpenAI's API can sniff the format.
+export async function transcribe(
+  audio: Buffer,
+  filename: string,
+  mimeType?: string,
+): Promise<{ text: string }> {
+  const client = getClient();
+  const file = await toFile(audio, filename, mimeType ? { type: mimeType } : undefined);
+  const result = await client.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+  });
+  return { text: (result.text ?? '').trim() };
 }
