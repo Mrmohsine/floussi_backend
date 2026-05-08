@@ -12,20 +12,64 @@
 //      and link → if neither, create a new user.
 //   5. Mint our own JWT and return { token, user } shaped like /auth/login.
 
-import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
+import type { JWTPayload, JWTVerifyResult } from 'jose';
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { badRequest, unauthorized } from '../../utils/errors';
 import { signToken } from '../../utils/jwt';
 
-// Cached JWKS clients — `createRemoteJWKSet` builds a key fetcher with its
-// own internal cache, so call it once per provider.
-const googleJwks = createRemoteJWKSet(
-  new URL('https://www.googleapis.com/oauth2/v3/certs'),
-);
-const appleJwks = createRemoteJWKSet(
-  new URL('https://appleid.apple.com/auth/keys'),
-);
+// jose v6 is ESM-only and crashes Vercel's CJS runtime when require()'d.
+// Loading via a *real* dynamic import sidesteps the resolution mess. We
+// can't use a plain `await import('jose')` here because tsconfig.module
+// is "commonjs" — TS lowers that to `Promise.resolve().then(() => require())`,
+// which puts us right back in the ESM-via-require trap. The Function
+// constructor wrapper produces a runtime `import()` call that TS doesn't
+// touch, so Node uses its native dynamic-import path. JWKS getters are
+// memoized so subsequent requests skip the import + setup cost.
+const nativeImport = new Function('specifier', 'return import(specifier)') as
+  (specifier: string) => Promise<unknown>;
+
+type JoseModule = typeof import('jose');
+let josePromise: Promise<JoseModule> | null = null;
+let googleJwksPromise: Promise<ReturnType<JoseModule['createRemoteJWKSet']>> | null = null;
+let appleJwksPromise: Promise<ReturnType<JoseModule['createRemoteJWKSet']>> | null = null;
+
+async function getJose(): Promise<JoseModule> {
+  if (!josePromise) {
+    josePromise = nativeImport('jose') as Promise<JoseModule>;
+  }
+  return josePromise;
+}
+
+async function getGoogleJwks() {
+  if (!googleJwksPromise) {
+    googleJwksPromise = getJose().then((j) =>
+      j.createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs')),
+    );
+  }
+  return googleJwksPromise;
+}
+
+async function getAppleJwks() {
+  if (!appleJwksPromise) {
+    appleJwksPromise = getJose().then((j) =>
+      j.createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys')),
+    );
+  }
+  return appleJwksPromise;
+}
+
+// Narrow check that doesn't require importing jose's `errors` namespace at
+// module load time — JOSE errors carry a stable `code` string starting with
+// "ERR_" which we forward to the client.
+function isJoseError(e: unknown): e is { code: string; message: string } {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    typeof (e as { code?: unknown }).code === 'string' &&
+    (e as { code: string }).code.startsWith('ERR_')
+  );
+}
 
 const GOOGLE_ISSUERS = new Set([
   'https://accounts.google.com',
@@ -53,13 +97,15 @@ async function verifyGoogleIdToken(idToken: string): Promise<VerifiedClaims> {
     throw badRequest('Google sign-in is not configured on the server.');
   }
 
-  let payload;
+  const [{ jwtVerify }, googleJwks] = await Promise.all([getJose(), getGoogleJwks()]);
+  let payload: JWTPayload;
   try {
-    ({ payload } = await jwtVerify(idToken, googleJwks, {
+    const result: JWTVerifyResult = await jwtVerify(idToken, googleJwks, {
       audience: audiences,
-    }));
+    });
+    payload = result.payload;
   } catch (err) {
-    if (err instanceof joseErrors.JOSEError) {
+    if (isJoseError(err)) {
       throw unauthorized(`Google id_token rejected: ${err.code}`);
     }
     throw unauthorized('Google id_token rejected.');
@@ -89,14 +135,16 @@ async function verifyAppleIdToken(idToken: string): Promise<VerifiedClaims> {
     throw badRequest('Apple sign-in is not configured on the server.');
   }
 
-  let payload;
+  const [{ jwtVerify }, appleJwks] = await Promise.all([getJose(), getAppleJwks()]);
+  let payload: JWTPayload;
   try {
-    ({ payload } = await jwtVerify(idToken, appleJwks, {
+    const result: JWTVerifyResult = await jwtVerify(idToken, appleJwks, {
       issuer: APPLE_ISSUER,
       audience: env.APPLE_BUNDLE_ID,
-    }));
+    });
+    payload = result.payload;
   } catch (err) {
-    if (err instanceof joseErrors.JOSEError) {
+    if (isJoseError(err)) {
       throw unauthorized(`Apple id_token rejected: ${err.code}`);
     }
     throw unauthorized('Apple id_token rejected.');
