@@ -116,17 +116,21 @@ export async function register(input: RegisterInput) {
 
   const { delivered } = await issueCode(user.id, user.email, 'EMAIL_VERIFY');
 
-  // Dev convenience: when the Resend sandbox refuses delivery (any address
+  // Dev escape hatch: when the Resend sandbox refuses delivery (any address
   // that isn't the account owner), the user would otherwise be stuck on the
-  // verify screen forever. Auto-verify them so testing isn't blocked.
-  // In production this branch never fires — emails must actually be sent.
-  if (!delivered && env.NODE_ENV !== 'production') {
+  // verify screen forever. Off by default — flip AUTO_VERIFY_ON_SANDBOX_FAILURE=1
+  // locally to bypass. Hard-coded off in production regardless of the flag.
+  if (
+    !delivered &&
+    env.NODE_ENV !== 'production' &&
+    env.AUTO_VERIFY_ON_SANDBOX_FAILURE
+  ) {
     user = await prisma.user.update({
       where: { id: user.id },
       data: { emailVerified: true, emailVerifiedAt: new Date() },
     });
     console.log(
-      `[auth] auto-verified ${user.email} (Resend sandbox can't deliver to this address)`,
+      `[auth] auto-verified ${user.email} (Resend sandbox can't deliver; AUTO_VERIFY_ON_SANDBOX_FAILURE=1)`,
     );
   }
 
@@ -137,6 +141,16 @@ export async function register(input: RegisterInput) {
 export async function login(input: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) throw unauthorized('Invalid credentials');
+
+  // OAuth-only accounts have no passwordHash. Tell the user which provider
+  // to use rather than the generic "invalid credentials" — they'd otherwise
+  // hammer the wrong password until they hit the rate limit.
+  if (!user.passwordHash) {
+    const provider = user.provider === 'google' ? 'Google'
+      : user.provider === 'apple' ? 'Apple'
+      : 'your social account';
+    throw unauthorized(`This account uses ${provider} sign-in.`);
+  }
 
   const ok = await verifyPassword(input.password, user.passwordHash);
   if (!ok) throw unauthorized('Invalid credentials');
@@ -237,6 +251,11 @@ export async function changePassword(
 ) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw unauthorized();
+  // OAuth-only users have no password to change. UI hides the option but
+  // guard the API anyway — defense in depth against a tampered client.
+  if (!user.passwordHash) {
+    throw badRequest('This account signs in with a social provider.');
+  }
   const ok = await verifyPassword(currentPassword, user.passwordHash);
   if (!ok) throw badRequest('Current password is incorrect.');
 
@@ -261,6 +280,15 @@ export async function changePassword(
 export async function deleteAccount(userId: string, password: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw unauthorized();
+  // OAuth-only users have no password — the mobile client must instead
+  // re-authenticate via the provider before calling delete. Until that
+  // flow exists, refuse deletion so a stolen device can't wipe the
+  // account just by tapping through.
+  if (!user.passwordHash) {
+    throw badRequest(
+      'Account deletion isn\'t supported for social-login accounts yet. Email support to remove your account.',
+    );
+  }
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw badRequest('Incorrect password.');
 

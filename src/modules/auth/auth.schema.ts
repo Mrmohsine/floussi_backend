@@ -50,6 +50,25 @@ export const deleteAccountSchema = z.object({
   password: z.string().min(1),
 });
 
+// OAuth — id_token from Google's native SDK. Server verifies + signs in.
+export const googleOAuthSchema = z.object({
+  idToken: z.string().min(20),
+});
+
+// Apple sends fullName *only* on the very first sign-in, separately from
+// the id_token. Mobile passes it through so we can use it as the display
+// name when creating a new user.
+export const appleOAuthSchema = z.object({
+  idToken: z.string().min(20),
+  fullName: z
+    .object({
+      givenName: z.string().nullable().optional(),
+      familyName: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
