@@ -7,10 +7,9 @@ generator client {
 }
 
 datasource db {
-  // For local dev we run on SQLite (zero install). Switch to "postgresql"
-  // for production and add back the @db.Decimal(12,2) native attributes.
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ──────────────────────────────────────────────────────────────────────
