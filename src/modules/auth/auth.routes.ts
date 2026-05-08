@@ -11,6 +11,7 @@ import {
   resendVerificationSchema,
   resetPasswordSchema,
   verifyEmailSchema,
+  verifyResetCodeSchema,
 } from './auth.schema';
 import * as service from './auth.service';
 
@@ -69,6 +70,14 @@ router.post(
   validate(forgotPasswordSchema),
   asyncHandler(async (req, res) => {
     res.json(await service.forgotPassword(req.body.email));
+  }),
+);
+
+router.post(
+  '/verify-reset-code',
+  validate(verifyResetCodeSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.verifyResetCode(req.body.email, req.body.code));
   }),
 );
 

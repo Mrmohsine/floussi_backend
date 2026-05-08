@@ -57,6 +57,15 @@ export const PLAN_PRICES: Record<Plan, number> = {
   PREMIUM: 12.99,
 };
 
+// Yearly billing uses fixed flat pricing: $5/mo on Pro, $10/mo on Premium —
+// billed annually as $60 / $120. Premium yearly works out cheaper per-month
+// than Pro monthly, which is the main upsell for the annual cycle.
+export const PLAN_PRICES_YEARLY: Record<Plan, number> = {
+  FREE: 0,
+  PRO: 60,
+  PREMIUM: 120,
+};
+
 export const isPlan = (s: string): s is Plan =>
   s === 'FREE' || s === 'PRO' || s === 'PREMIUM';
 

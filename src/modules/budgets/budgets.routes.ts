@@ -6,7 +6,6 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { upsertBudgetSchema } from './budgets.schema';
 import * as service from './budgets.service';
 import { assertWithinHistoryWindow, getUserPlan } from '../billing/enforce';
-import { PLAN_LIMITS } from '../billing/plans';
 
 const router = Router();
 router.use(requireAuth);
@@ -36,11 +35,12 @@ router.get(
   validate(historyQuery, 'query'),
   asyncHandler(async (req, res) => {
     const { months } = req.query as unknown as z.infer<typeof historyQuery>;
-    const plan = await getUserPlan(req.userId!);
-    // Clamp to whichever is smaller: requested count or plan's history window.
-    // Always at least 1 (current month).
-    const planLimit = PLAN_LIMITS[plan].historyMonths;
-    const count = Math.max(1, Math.min(months ?? planLimit, planLimit));
+    // History returns lightweight aggregates (saved/spent totals) and is used
+    // to drive the month-picker chips — including the locked-month preview
+    // for users on lower plans. We deliberately don't clamp to historyMonths
+    // here: showing "you saved $X in March" on a greyed chip is the upgrade
+    // teaser. Hard-cap at 60 months total.
+    const count = Math.max(1, Math.min(months ?? 12, 60));
     res.json(await service.getBudgetHistory(req.userId!, count));
   }),
 );

@@ -187,6 +187,28 @@ export async function forgotPassword(email: string) {
   };
 }
 
+// Validates a PASSWORD_RESET code against the user's latest active code
+// without consuming it. Throws on missing/expired/incorrect — same shape
+// as consumeCode so the mobile flow can show consistent errors.
+export async function verifyResetCode(email: string, code: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  // Mirror resetPassword's vague error to avoid email enumeration.
+  if (!user) throw badRequest('Incorrect code.');
+
+  const trimmed = code.trim();
+  const record = await prisma.oneTimeCode.findFirst({
+    where: { userId: user.id, kind: 'PASSWORD_RESET', consumedAt: null },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!record) throw badRequest('Code not found. Request a new one.');
+  if (record.expiresAt.getTime() < Date.now()) {
+    throw badRequest('Code expired. Request a new one.');
+  }
+  if (record.code !== trimmed) throw badRequest('Incorrect code.');
+
+  return { ok: true as const };
+}
+
 export async function resetPassword(email: string, code: string, newPassword: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw badRequest('Invalid code or email.');

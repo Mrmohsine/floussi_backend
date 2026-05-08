@@ -34,6 +34,13 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8).max(72),
 });
 
+// Same payload as resetPassword without the password — server checks the
+// code is valid (without consuming it) so the client can gate UI on it.
+export const verifyResetCodeSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(8).max(72),
