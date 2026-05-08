@@ -174,6 +174,55 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
   };
 }
 
+// Lightweight per-month rollup for the month-picker UI. Returns one entry
+// per month for the last `count` months (most-recent first), even when no
+// budget exists for that month — `exists: false` lets the client distinguish
+// "empty" from "loading".
+export async function getBudgetHistory(userId: string, count: number) {
+  const now = new Date();
+  const months: Array<{ year: number; month: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    months.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 });
+  }
+
+  const budgets = await prisma.budgetMonth.findMany({
+    where: { userId, OR: months.map((m) => ({ year: m.year, month: m.month })) },
+    include: { incomes: true, expenses: { select: { amount: true } } },
+  });
+
+  const byKey = new Map<string, typeof budgets[number]>();
+  for (const b of budgets) byKey.set(`${b.year}-${b.month}`, b);
+
+  return months.map(({ year, month }) => {
+    const b = byKey.get(`${year}-${month}`);
+    if (!b) {
+      return {
+        year, month, exists: false as const,
+        actualIncome: 0, totalSpent: 0, saved: 0, plannedIncome: 0,
+      };
+    }
+    const totalSpent = b.expenses.reduce(
+      (acc: Prisma.Decimal, e) => acc.add(e.amount),
+      new Prisma.Decimal(0),
+    );
+    const actualIncome = b.incomes.reduce(
+      (acc, i) => acc.add(i.amount),
+      new Prisma.Decimal(0),
+    );
+    const incomeForSaved = actualIncome.gt(0) ? actualIncome : b.plannedIncome;
+    const saved = incomeForSaved.sub(totalSpent);
+    return {
+      year, month,
+      exists: true as const,
+      actualIncome: toNumber(actualIncome),
+      totalSpent: toNumber(totalSpent),
+      saved: toNumber(saved),
+      plannedIncome: toNumber(b.plannedIncome),
+    };
+  });
+}
+
 export async function deleteBudget(userId: string, id: string) {
   const b = await prisma.budgetMonth.findFirst({ where: { id, userId } });
   if (!b) throw notFound();

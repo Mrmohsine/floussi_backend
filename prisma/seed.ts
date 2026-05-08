@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 const SYSTEM_CATEGORIES = [
-  { name: 'Rent / Mortgage',     icon: 'home',         color: '#6366F1' },
+  { name: 'Housing',             icon: 'home',         color: '#6366F1' },
   { name: 'Groceries',           icon: 'shopping-cart',color: '#10B981' },
   { name: 'Gas',                 icon: 'fuel',         color: '#F59E0B' },
   { name: 'Car Payment',         icon: 'car',          color: '#3B82F6' },
@@ -65,7 +65,7 @@ async function seedDemoUser() {
 
   // Recurring bills
   const bills = [
-    { name: 'Apartment Rent',  cat: 'Rent / Mortgage',     amount: 1850, dueDay: 1  },
+    { name: 'Apartment Rent',  cat: 'Housing',             amount: 1850, dueDay: 1  },
     { name: 'Verizon Wireless', cat: 'Phone',               amount: 75,   dueDay: 5  },
     { name: 'Spectrum Internet', cat: 'Internet',           amount: 60,   dueDay: 8  },
     { name: 'Geico Auto',       cat: 'Car Insurance',      amount: 142,  dueDay: 12 },

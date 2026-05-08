@@ -8,7 +8,7 @@ const SAMPLE_DATA = {
   income: 4500,
   savingsTarget: 500,
   bills: [
-    { name: 'Rent', cat: 'Rent / Mortgage', amount: 1500, dueDay: 1 },
+    { name: 'Rent', cat: 'Housing', amount: 1500, dueDay: 1 },
     { name: 'Electricity', cat: 'Utilities', amount: 120, dueDay: 15 },
     { name: 'Netflix', cat: 'Subscriptions', amount: 15, dueDay: 10 },
     { name: 'Gym', cat: 'Subscriptions', amount: 40, dueDay: 5 },

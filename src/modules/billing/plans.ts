@@ -33,7 +33,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     savingsGoals: 5,
     debts: 3,
     recurringBills: 10,
-    historyMonths: 12,
+    historyMonths: 3,
     conversationHistory: false,
     csvExport: false,
     weeklyAiSummary: false,
