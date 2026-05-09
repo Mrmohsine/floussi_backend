@@ -6,8 +6,8 @@ CREATE TABLE "User" (
     "name" TEXT NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'USD',
     "paySchedule" TEXT NOT NULL DEFAULT 'BIWEEKLY',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
@@ -18,7 +18,7 @@ CREATE TABLE "Category" (
     "color" TEXT NOT NULL,
     "isSystem" BOOLEAN NOT NULL DEFAULT false,
     "userId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Category_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -31,8 +31,8 @@ CREATE TABLE "BudgetMonth" (
     "plannedIncome" DECIMAL NOT NULL,
     "savingsTarget" DECIMAL NOT NULL DEFAULT 0,
     "notes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "BudgetMonth_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -43,9 +43,9 @@ CREATE TABLE "Income" (
     "budgetMonthId" TEXT,
     "amount" DECIMAL NOT NULL,
     "source" TEXT NOT NULL,
-    "receivedAt" DATETIME NOT NULL,
+    "receivedAt" TIMESTAMP(3) NOT NULL,
     "note" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Income_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "Income_budgetMonthId_fkey" FOREIGN KEY ("budgetMonthId") REFERENCES "BudgetMonth" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -57,13 +57,13 @@ CREATE TABLE "Expense" (
     "categoryId" TEXT NOT NULL,
     "budgetMonthId" TEXT,
     "amount" DECIMAL NOT NULL,
-    "date" DATETIME NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
     "note" TEXT,
     "paymentMethod" TEXT NOT NULL DEFAULT 'DEBIT_CARD',
     "type" TEXT NOT NULL DEFAULT 'VARIABLE',
     "recurringBillId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Expense_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "Expense_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "Expense_budgetMonthId_fkey" FOREIGN KEY ("budgetMonthId") REFERENCES "BudgetMonth" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
@@ -78,12 +78,12 @@ CREATE TABLE "SavingsGoal" (
     "type" TEXT NOT NULL DEFAULT 'OTHER',
     "targetAmount" DECIMAL NOT NULL,
     "savedAmount" DECIMAL NOT NULL DEFAULT 0,
-    "targetDate" DATETIME,
+    "targetDate" TIMESTAMP(3),
     "icon" TEXT NOT NULL DEFAULT 'piggy-bank',
     "color" TEXT NOT NULL DEFAULT '#10B981',
-    "archivedAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "archivedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "SavingsGoal_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -98,9 +98,9 @@ CREATE TABLE "Debt" (
     "interestRate" DECIMAL NOT NULL DEFAULT 0,
     "minimumPayment" DECIMAL NOT NULL,
     "dueDay" INTEGER,
-    "payoffDate" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "payoffDate" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Debt_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -116,8 +116,8 @@ CREATE TABLE "RecurringBill" (
     "active" BOOLEAN NOT NULL DEFAULT true,
     "paymentMethod" TEXT NOT NULL DEFAULT 'DEBIT_CARD',
     "note" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "RecurringBill_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "RecurringBill_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );

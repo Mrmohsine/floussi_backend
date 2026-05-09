@@ -17,6 +17,18 @@ import {
 const router = Router();
 router.use(requireAuth);
 
+const BILLING_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  emailVerified: true,
+  countryCode: true,
+  currency: true,
+  paySchedule: true,
+  plan: true,
+  planSince: true,
+} as const;
+
 let _stripe: InstanceType<typeof Stripe> | null = null;
 function stripe(): InstanceType<typeof Stripe> {
   if (!env.STRIPE_SECRET_KEY) {
@@ -24,6 +36,57 @@ function stripe(): InstanceType<typeof Stripe> {
   }
   if (!_stripe) _stripe = new Stripe(env.STRIPE_SECRET_KEY);
   return _stripe;
+}
+
+interface RevenueCatSubscriberResponse {
+  subscriber?: {
+    entitlements?: Record<string, {
+      expires_date?: string | null;
+    }>;
+  };
+}
+
+type RevenueCatEntitlements = NonNullable<
+  NonNullable<RevenueCatSubscriberResponse['subscriber']>['entitlements']
+>;
+
+function isRevenueCatEntitlementActive(
+  entitlements: RevenueCatEntitlements | undefined,
+  id: string,
+) {
+  const entitlement = entitlements?.[id];
+  if (!entitlement) return false;
+  if (!entitlement.expires_date) return true;
+  return new Date(entitlement.expires_date).getTime() > Date.now();
+}
+
+async function revenueCatPlanForUser(userId: string): Promise<Plan> {
+  if (!env.REVENUECAT_SECRET_KEY) {
+    throw new HttpError(
+      503,
+      'RevenueCat sync is unavailable — backend is missing REVENUECAT_SECRET_KEY.',
+    );
+  }
+
+  const response = await fetch(
+    `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${env.REVENUECAT_SECRET_KEY}`,
+        Accept: 'application/json',
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new HttpError(502, `RevenueCat sync failed with status ${response.status}.`);
+  }
+
+  const data = await response.json() as RevenueCatSubscriberResponse;
+  const entitlements = data.subscriber?.entitlements;
+  if (isRevenueCatEntitlementActive(entitlements, 'premium')) return 'PREMIUM';
+  if (isRevenueCatEntitlementActive(entitlements, 'pro')) return 'PRO';
+  return 'FREE';
 }
 
 const upgradeSchema = z.object({
@@ -97,10 +160,7 @@ router.post(
     const updated = await prisma.user.update({
       where: { id: userId },
       data: { plan: target, planSince: new Date() },
-      select: {
-        id: true, email: true, name: true, currency: true,
-        paySchedule: true, plan: true, planSince: true,
-      },
+      select: BILLING_USER_SELECT,
     });
 
     res.json({
@@ -205,10 +265,37 @@ router.post(
     const updated = await prisma.user.update({
       where: { id: userId },
       data: { plan: targetPlan, planSince: new Date() },
-      select: {
-        id: true, email: true, name: true, currency: true,
-        paySchedule: true, plan: true, planSince: true,
+      select: BILLING_USER_SELECT,
+    });
+
+    res.json({
+      ok: true,
+      plan: updated.plan,
+      planSince: updated.planSince.toISOString(),
+      user: updated,
+    });
+  }),
+);
+
+router.post(
+  '/sync-revenuecat',
+  asyncHandler(async (req, res) => {
+    const userId = req.userId!;
+    const plan = await revenueCatPlanForUser(userId);
+
+    const current = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true, planSince: true },
+    });
+    if (!current) throw new HttpError(404, 'User not found.');
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        plan,
+        planSince: current.plan === plan ? current.planSince : new Date(),
       },
+      select: BILLING_USER_SELECT,
     });
 
     res.json({

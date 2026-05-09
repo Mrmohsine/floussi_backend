@@ -12,8 +12,8 @@ if (runtimeNodeEnv === 'test') {
 }
 
 const schema = z.object({
-  // Accept any non-empty string so file:./dev.db (SQLite) is allowed too.
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().min(1).optional(),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 chars'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   PORT: z.coerce.number().default(4000),
@@ -25,6 +25,8 @@ const schema = z.object({
   // Optional — billing endpoints return 503 if these are missing.
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Optional — required for syncing native subscriptions into backend plans.
+  REVENUECAT_SECRET_KEY: z.string().optional(),
   // Used to build success/cancel URLs that deep-link back into the app.
   APP_DEEP_LINK_SCHEME: z.string().default('paycheck'),
   // Optional — if missing, OTP codes log to stdout instead of being emailed.

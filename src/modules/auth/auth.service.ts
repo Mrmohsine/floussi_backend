@@ -14,6 +14,17 @@ import type { LoginInput, RegisterInput } from './auth.schema';
 
 export type CodeKind = 'EMAIL_VERIFY' | 'PASSWORD_RESET';
 
+const COUNTRY_CURRENCY: Record<string, string> = {
+  US: 'USD',
+  EU: 'EUR',
+  JP: 'JPY',
+  GB: 'GBP',
+  CN: 'CNY',
+  AU: 'AUD',
+  CA: 'CAD',
+  CH: 'CHF',
+};
+
 const CODE_TTL_MINUTES: Record<CodeKind, number> = {
   EMAIL_VERIFY: 30,
   PASSWORD_RESET: 15,
@@ -23,6 +34,7 @@ const publicUser = (u: {
   id: string;
   email: string;
   name: string;
+  countryCode: string;
   currency: string;
   paySchedule: string;
   plan: string;
@@ -31,6 +43,7 @@ const publicUser = (u: {
   id: u.id,
   email: u.email,
   name: u.name,
+  countryCode: u.countryCode,
   currency: u.currency,
   paySchedule: u.paySchedule,
   plan: u.plan,
@@ -110,6 +123,8 @@ export async function register(input: RegisterInput) {
       name: input.name,
       email: input.email,
       passwordHash,
+      countryCode: input.countryCode,
+      currency: COUNTRY_CURRENCY[input.countryCode] ?? 'USD',
       paySchedule: input.paySchedule,
     },
   });
@@ -278,9 +293,9 @@ export async function exportData(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true, email: true, name: true, currency: true, paySchedule: true,
-      plan: true, planSince: true, emailVerified: true, emailVerifiedAt: true,
-      createdAt: true, updatedAt: true,
+      id: true, email: true, name: true, countryCode: true, currency: true,
+      paySchedule: true, plan: true, planSince: true, emailVerified: true,
+      emailVerifiedAt: true, createdAt: true, updatedAt: true,
     },
   });
   if (!user) throw unauthorized();
@@ -301,7 +316,10 @@ export async function exportData(userId: string) {
       where: { userId },
       include: { category: { select: { name: true } } },
     }),
-    prisma.category.findMany({ where: { userId } }),
+    prisma.userCategory.findMany({
+      where: { userId },
+      include: { category: true },
+    }),
     prisma.conversation.findMany({
       where: { userId },
       include: {
@@ -338,7 +356,7 @@ export async function exportData(userId: string) {
       minimumPayment: decimalToNumber(d.minimumPayment),
     })),
     recurringBills: recurring.map((r) => ({ ...r, amount: decimalToNumber(r.amount) })),
-    customCategories: categories,
+    customCategories: categories.map((c) => c.category),
     conversations,
     notifications,
   };

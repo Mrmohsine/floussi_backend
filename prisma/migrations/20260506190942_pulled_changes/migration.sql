@@ -10,10 +10,10 @@ CREATE TABLE "Notification" (
     "actionLabel" TEXT,
     "priority" INTEGER NOT NULL,
     "fingerprint" TEXT,
-    "aiEnhancedAt" DATETIME,
-    "readAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "aiEnhancedAt" TIMESTAMP(3),
+    "readAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

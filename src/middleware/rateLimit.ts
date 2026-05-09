@@ -29,6 +29,10 @@ function clientKey(req: Request, prefix: string): string {
 export function rateLimit({ keyPrefix, windowMs, max, message }: Options) {
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
+    for (const [bucketKey, bucket] of buckets) {
+      if (bucket.resetAt <= now) buckets.delete(bucketKey);
+    }
+
     const key = clientKey(req, keyPrefix);
     const existing = buckets.get(key);
 
@@ -52,11 +56,3 @@ export function rateLimit({ keyPrefix, windowMs, max, message }: Options) {
     next();
   };
 }
-
-// Periodic sweep so the map doesn't grow unbounded under heavy traffic.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
-  }
-}, 60_000).unref();

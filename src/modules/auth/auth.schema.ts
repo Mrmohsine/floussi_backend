@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
+export const countryCodeSchema = z.enum(['US', 'EU', 'JP', 'GB', 'CN', 'AU', 'CA', 'CH']);
+
 export const registerSchema = z.object({
   name: z.string().min(1).max(80),
   email: z.string().email().toLowerCase(),
   password: z.string().min(8).max(72),
+  countryCode: countryCodeSchema.default('US'),
   paySchedule: z
     .enum(['WEEKLY', 'BIWEEKLY', 'TWICE_MONTHLY', 'MONTHLY'])
     .default('BIWEEKLY'),

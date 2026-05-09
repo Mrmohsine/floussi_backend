@@ -27,16 +27,20 @@ const SYSTEM_CATEGORIES = [
   { name: 'Other',               icon: 'tag',          color: '#6B7280' },
 ];
 
+const normalizeCategoryName = (name: string) => name.trim().toLowerCase();
+
 async function seedSystemCategories() {
-  // userId is nullable so the (userId, name) unique can't match here — do an
-  // idempotent insert via findFirst → create.
   for (const c of SYSTEM_CATEGORIES) {
     const exists = await prisma.category.findFirst({
-      where: { isSystem: true, name: c.name },
+      where: { normalizedName: normalizeCategoryName(c.name) },
     });
     if (!exists) {
       await prisma.category.create({
-        data: { ...c, isSystem: true, userId: null },
+        data: {
+          ...c,
+          normalizedName: normalizeCategoryName(c.name),
+          isSystem: true,
+        },
       });
     }
   }
@@ -199,7 +203,7 @@ async function seedDemoUser() {
 
 async function main() {
   await seedSystemCategories();
-  await seedDemoUser();
+  // await seedDemoUser();
 }
 
 main()

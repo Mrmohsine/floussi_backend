@@ -1,0 +1,8 @@
+dist
+coverage
+tests
+prisma/dev.db
+*.log
+.env
+.env.*
+!.env.example

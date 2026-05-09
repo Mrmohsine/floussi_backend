@@ -30,6 +30,19 @@ const updateSchema = createSchema.partial();
 
 const serialize = (b: any) => ({ ...b, amount: toNumber(b.amount) });
 
+async function assertUserCanUseCategory(userId: string, categoryId: string) {
+  const cat = await prisma.category.findFirst({
+    where: {
+      id: categoryId,
+      OR: [
+        { isSystem: true },
+        { userCategories: { some: { userId } } },
+      ],
+    },
+  });
+  if (!cat) throw badRequest('Invalid category');
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -47,13 +60,7 @@ router.post(
   validate(createSchema),
   asyncHandler(async (req, res) => {
     await assertCanCreateRecurring(req.userId!);
-    const cat = await prisma.category.findFirst({
-      where: {
-        id: req.body.categoryId,
-        OR: [{ isSystem: true }, { userId: req.userId! }],
-      },
-    });
-    if (!cat) throw badRequest('Invalid category');
+    await assertUserCanUseCategory(req.userId!, req.body.categoryId);
     const b = await prisma.recurringBill.create({
       data: {
         ...req.body,
@@ -74,6 +81,9 @@ router.patch(
       where: { id: req.params.id, userId: req.userId! },
     });
     if (!existing) throw notFound();
+    if (req.body.categoryId) {
+      await assertUserCanUseCategory(req.userId!, req.body.categoryId);
+    }
     const b = await prisma.recurringBill.update({
       where: { id: req.params.id },
       data: {

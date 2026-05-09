@@ -20,7 +20,10 @@ import { errorHandler, notFoundHandler } from './middleware/error';
 import { rateLimit } from './middleware/rateLimit';
 import { env } from './config/env';
 
-export const app = express();
+const app = express();
+app.disable('x-powered-by');
+app.disable('etag');
+app.set('trust proxy', 1);
 
 const allowedOrigins = env.CORS_ORIGINS
   .split(',')
@@ -38,9 +41,20 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan('dev'));
+if (env.NODE_ENV !== 'test') {
+  app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+}
 
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+app.get('/', (_req, res) => res.json({ ok: true, service: 'paycheck-api' }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 app.use('/api/auth/login', rateLimit({
   keyPrefix: 'auth-login',
@@ -77,3 +91,6 @@ app.use('/api/notifications', notificationsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+export default app;
+module.exports = app;

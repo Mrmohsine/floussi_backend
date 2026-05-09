@@ -7,17 +7,18 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// "Enum" values — kept as constants here for reference. SQLite doesn't
-// support Prisma enums, so we store these as plain String columns and
-// rely on the Zod validators at the route boundary to enforce the set.
+// "Enum" values — kept as constants here for reference. We store these as
+// plain String columns and rely on the Zod validators at the route boundary
+// to enforce the set.
 //
 //   PaySchedule:        WEEKLY | BIWEEKLY | TWICE_MONTHLY | MONTHLY
+//   CountryCode:        US | EU | JP | GB | CN | AU | CA | CH
 //   PaymentMethod:      CASH | DEBIT_CARD | CREDIT_CARD | BANK_TRANSFER
 //   ExpenseType:        FIXED_BILL | VARIABLE
 //   DebtType:           CREDIT_CARD | STUDENT_LOAN | AUTO_LOAN |
@@ -26,6 +27,12 @@ datasource db {
 //                       HOUSE_DOWN_PAYMENT | DEBT_PAYOFF | OTHER
 //   RecurringFrequency: MONTHLY | WEEKLY | BIWEEKLY | YEARLY
 // ──────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+  PREMIUM
+}
 
 // ──────────────────────────────────────────────────────────────────────
 // User
@@ -36,9 +43,10 @@ model User {
   email           String    @unique
   passwordHash    String
   name            String
+  countryCode     String    @default("US")
   currency        String    @default("USD")
   paySchedule     String    @default("BIWEEKLY")
-  plan            String    @default("FREE") // FREE | PRO | PREMIUM
+  plan            Plan      @default(FREE)
   planSince       DateTime  @default(now())
   emailVerified   Boolean   @default(false)
   emailVerifiedAt DateTime?
@@ -46,7 +54,7 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   budgetMonths   BudgetMonth[]
-  categories     Category[]
+  userCategories UserCategory[]
   expenses       Expense[]
   incomes        Income[]
   savingsGoals   SavingsGoal[]
@@ -60,14 +68,14 @@ model User {
 // One-time codes for email verification + password reset.
 // kind = "EMAIL_VERIFY" | "PASSWORD_RESET". 6-digit numeric.
 model OneTimeCode {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   kind       String
   code       String
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId, kind])
   @@index([expiresAt])
@@ -94,7 +102,7 @@ model ChatMessage {
   id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String       // "user" | "assistant"
+  role           String // "user" | "assistant"
   content        String
   createdAt      DateTime     @default(now())
 
@@ -106,21 +114,21 @@ model ChatMessage {
 // ──────────────────────────────────────────────────────────────────────
 
 model Notification {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  monthKey    String    // YYYY-MM
-  sourceId    String    // stable generator id, e.g. debt_high_apr_<debtId>
-  tone        String    // positive | info | warning | alert
-  title       String
-  body        String
-  actionLabel String?
-  priority    Int
-  fingerprint String?
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthKey     String // YYYY-MM
+  sourceId     String // stable generator id, e.g. debt_high_apr_<debtId>
+  tone         String // positive | info | warning | alert
+  title        String
+  body         String
+  actionLabel  String?
+  priority     Int
+  fingerprint  String?
   aiEnhancedAt DateTime?
-  readAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([userId, monthKey, sourceId])
   @@index([userId, monthKey, readAt])
@@ -128,24 +136,34 @@ model Notification {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Categories — system defaults + user-created
+// Categories — shared catalog + user links
 // ──────────────────────────────────────────────────────────────────────
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String
-  icon      String   // emoji or icon key e.g. "home", "fork-knife"
-  color     String   // hex e.g. "#10B981"
-  isSystem  Boolean  @default(false)
-  userId    String?  // null when isSystem=true
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique
+  icon           String // icon key e.g. "home", "utensils"
+  color          String // hex e.g. "#10B981"
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
+  userCategories UserCategory[]
   expenses       Expense[]
   recurringBills RecurringBill[]
+}
 
-  @@unique([userId, name])
+model UserCategory {
+  userId     String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
   @@index([userId])
+  @@index([categoryId])
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -157,7 +175,7 @@ model BudgetMonth {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   year          Int
-  month         Int      // 1–12
+  month         Int // 1–12
   plannedIncome Decimal
   savingsTarget Decimal  @default(0)
   notes         String?
@@ -176,16 +194,16 @@ model BudgetMonth {
 // ──────────────────────────────────────────────────────────────────────
 
 model Income {
-  id            String      @id @default(cuid())
+  id            String       @id @default(cuid())
   userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   budgetMonthId String?
   budgetMonth   BudgetMonth? @relation(fields: [budgetMonthId], references: [id], onDelete: SetNull)
   amount        Decimal
-  source        String      // "Employer", "Side gig", etc.
+  source        String // "Employer", "Side gig", etc.
   receivedAt    DateTime
   note          String?
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([userId, receivedAt])
 }
@@ -195,23 +213,23 @@ model Income {
 // ──────────────────────────────────────────────────────────────────────
 
 model Expense {
-  id            String        @id @default(cuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId    String
-  category      Category      @relation(fields: [categoryId], references: [id])
-  budgetMonthId String?
-  budgetMonth   BudgetMonth?  @relation(fields: [budgetMonthId], references: [id], onDelete: SetNull)
-  amount        Decimal
-  date          DateTime
-  note          String?
-  paymentMethod String        @default("DEBIT_CARD")
-  type          String        @default("VARIABLE")
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category       @relation(fields: [categoryId], references: [id])
+  budgetMonthId   String?
+  budgetMonth     BudgetMonth?   @relation(fields: [budgetMonthId], references: [id], onDelete: SetNull)
+  amount          Decimal
+  date            DateTime
+  note            String?
+  paymentMethod   String         @default("DEBIT_CARD")
+  type            String         @default("VARIABLE")
   // If created from a recurring bill template
   recurringBillId String?
   recurringBill   RecurringBill? @relation(fields: [recurringBillId], references: [id], onDelete: SetNull)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([userId, date])
   @@index([categoryId])
@@ -223,19 +241,19 @@ model Expense {
 // ──────────────────────────────────────────────────────────────────────
 
 model SavingsGoal {
-  id           String          @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  type         String          @default("OTHER")
+  type         String    @default("OTHER")
   targetAmount Decimal
-  savedAmount  Decimal         @default(0)
+  savedAmount  Decimal   @default(0)
   targetDate   DateTime?
-  icon         String          @default("piggy-bank")
-  color        String          @default("#10B981")
+  icon         String    @default("piggy-bank")
+  color        String    @default("#10B981")
   archivedAt   DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([userId])
 }
@@ -245,19 +263,19 @@ model SavingsGoal {
 // ──────────────────────────────────────────────────────────────────────
 
 model Debt {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
-  type            String   @default("OTHER")
+  type            String    @default("OTHER")
   totalAmount     Decimal
   remainingAmount Decimal
-  interestRate    Decimal  @default(0) // APR percent, e.g. 19.990
+  interestRate    Decimal   @default(0) // APR percent, e.g. 19.990
   minimumPayment  Decimal
   dueDay          Int? // 1–31
   payoffDate      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId])
 }
@@ -267,20 +285,20 @@ model Debt {
 // ──────────────────────────────────────────────────────────────────────
 
 model RecurringBill {
-  id         String             @id @default(cuid())
-  userId     String
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId String
-  category   Category           @relation(fields: [categoryId], references: [id])
-  name       String
-  amount     Decimal
-  frequency  String             @default("MONTHLY")
-  dueDay     Int // 1–31, day of month
-  active     Boolean            @default(true)
-  paymentMethod String          @default("DEBIT_CARD")
-  note       String?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  name          String
+  amount        Decimal
+  frequency     String   @default("MONTHLY")
+  dueDay        Int // 1–31, day of month
+  active        Boolean  @default(true)
+  paymentMethod String   @default("DEBIT_CARD")
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   expenses Expense[]
 

@@ -13,7 +13,9 @@ const createCategorySchema = z.object({
   color: z.string().regex(/^#?[0-9A-Fa-f]{6}$/).default('#6366F1'),
 });
 
-// List system + this user's categories, enriched with usageCount so the
+const normalizeCategoryName = (name: string) => name.trim().toLowerCase();
+
+// List system + linked user categories, enriched with usageCount so the
 // picker can surface frequently-used ones first.
 router.get(
   '/',
@@ -22,7 +24,12 @@ router.get(
     const userId = req.userId!;
     const [cats, counts] = await Promise.all([
       prisma.category.findMany({
-        where: { OR: [{ isSystem: true }, { userId }] },
+        where: {
+          OR: [
+            { isSystem: true },
+            { userCategories: { some: { userId } } },
+          ],
+        },
       }),
       prisma.expense.groupBy({
         by: ['categoryId'],
@@ -47,10 +54,36 @@ router.post(
   requireAuth,
   validate(createCategorySchema),
   asyncHandler(async (req, res) => {
-    const cat = await prisma.category.create({
-      data: { ...req.body, userId: req.userId! },
+    const name = req.body.name.trim();
+    const normalizedName = normalizeCategoryName(name);
+
+    const cat = await prisma.category.upsert({
+      where: { normalizedName },
+      create: {
+        name,
+        normalizedName,
+        icon: req.body.icon,
+        color: req.body.color,
+        isSystem: false,
+      },
+      update: {},
     });
-    res.status(201).json(cat);
+
+    await prisma.userCategory.upsert({
+      where: {
+        userId_categoryId: {
+          userId: req.userId!,
+          categoryId: cat.id,
+        },
+      },
+      create: {
+        userId: req.userId!,
+        categoryId: cat.id,
+      },
+      update: {},
+    });
+
+    res.status(201).json({ ...cat, usageCount: 0 });
   }),
 );
 

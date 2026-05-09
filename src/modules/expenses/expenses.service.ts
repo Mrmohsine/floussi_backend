@@ -22,11 +22,21 @@ async function findOrCreateBudget(userId: string, date: Date) {
   });
 }
 
-export async function createExpense(userId: string, input: CreateExpenseInput) {
+async function assertUserCanUseCategory(userId: string, categoryId: string) {
   const cat = await prisma.category.findFirst({
-    where: { id: input.categoryId, OR: [{ isSystem: true }, { userId }] },
+    where: {
+      id: categoryId,
+      OR: [
+        { isSystem: true },
+        { userCategories: { some: { userId } } },
+      ],
+    },
   });
   if (!cat) throw badRequest('Invalid category');
+}
+
+export async function createExpense(userId: string, input: CreateExpenseInput) {
+  await assertUserCanUseCategory(userId, input.categoryId);
 
   const budget = await findOrCreateBudget(userId, input.date);
   const expense = await prisma.expense.create({
@@ -52,6 +62,10 @@ export async function updateExpense(
 ) {
   const existing = await prisma.expense.findFirst({ where: { id, userId } });
   if (!existing) throw notFound();
+
+  if (input.categoryId) {
+    await assertUserCanUseCategory(userId, input.categoryId);
+  }
 
   let budgetMonthId = existing.budgetMonthId;
   if (input.date) {
