@@ -11,17 +11,6 @@ if (runtimeNodeEnv === 'test') {
   process.env.NODE_ENV = 'test';
 }
 
-// `z.coerce.boolean()` treats every non-empty string as truthy ("0" → true),
-// which makes feature flags surprising. This helper accepts the usual env
-// shorthands and only flips on for explicit truthy values.
-const flag = z
-  .string()
-  .optional()
-  .transform((v) => {
-    if (!v) return false;
-    return ['1', 'true', 'yes', 'on'].includes(v.toLowerCase());
-  });
-
 const schema = z.object({
   // Accept any non-empty string so file:./dev.db (SQLite) is allowed too.
   DATABASE_URL: z.string().min(1),
@@ -41,21 +30,6 @@ const schema = z.object({
   // Optional — if missing, OTP codes log to stdout instead of being emailed.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('Paycheck <onboarding@resend.dev>'),
-  // OAuth — Google (web client = audience used for id_token verification;
-  // iOS client = additional accepted audience when the phone signs in via
-  // the iOS native sheet). Both endpoints 503 if these aren't configured.
-  GOOGLE_OAUTH_WEB_CLIENT_ID: z.string().optional(),
-  GOOGLE_OAUTH_IOS_CLIENT_ID: z.string().optional(),
-  // OAuth — Apple. APPLE_BUNDLE_ID is the audience the id_token must match.
-  // OAUTH_APPLE_ENABLED gates the endpoint until the App Store cert is in
-  // place — flip to "1" once enrolled in the Apple Developer Program.
-  APPLE_BUNDLE_ID: z.string().optional(),
-  OAUTH_APPLE_ENABLED: flag,
-  // Dev-only escape hatch: auto-verify a freshly-registered user when Resend
-  // refuses delivery (sandbox can only mail the account owner). Off by
-  // default so unverified accounts can't sneak through; set to "1" locally
-  // when you need to test flows without checking your inbox.
-  AUTO_VERIFY_ON_SANDBOX_FAILURE: flag,
 });
 
 const parsed = schema.safeParse(process.env);

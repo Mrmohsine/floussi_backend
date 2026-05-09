@@ -34,15 +34,7 @@ datasource db {
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
-  // Nullable: OAuth users (google/apple) sign in without a password and
-  // never get a hash. Email/password users always have one.
-  passwordHash    String?
-  // OAuth provenance. provider = "google" | "apple" | null (null = email).
-  // providerSub is the stable subject from the provider's id_token; we key
-  // future logins on (provider, providerSub) so a user with the same email
-  // can link multiple providers without collisions.
-  provider        String?
-  providerSub     String?
+  passwordHash    String
   name            String
   currency        String    @default("USD")
   paySchedule     String    @default("BIWEEKLY")
@@ -52,8 +44,6 @@ model User {
   emailVerifiedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  @@unique([provider, providerSub])
 
   budgetMonths   BudgetMonth[]
   categories     Category[]

@@ -3,11 +3,9 @@ import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import {
-  appleOAuthSchema,
   changePasswordSchema,
   deleteAccountSchema,
   forgotPasswordSchema,
-  googleOAuthSchema,
   loginSchema,
   registerSchema,
   resendVerificationSchema,
@@ -16,7 +14,6 @@ import {
   verifyResetCodeSchema,
 } from './auth.schema';
 import * as service from './auth.service';
-import * as oauthService from './oauth.service';
 
 const router = Router();
 
@@ -48,27 +45,6 @@ router.get(
 
 // Logout is client-side (drop the token). Stub kept for symmetry.
 router.post('/logout', requireAuth, (_req, res) => res.json({ ok: true }));
-
-// ── OAuth (Google + Apple) ────────────────────────────────────────
-// Mobile signs in via the platform native sheet, then POSTs the
-// resulting id_token here. We verify it against the provider's JWKS,
-// find-or-create the user, and return the same { token, user } shape
-// as /auth/login so the auth store treats it identically.
-router.post(
-  '/oauth/google',
-  validate(googleOAuthSchema),
-  asyncHandler(async (req, res) => {
-    res.json(await oauthService.googleSignIn(req.body.idToken));
-  }),
-);
-
-router.post(
-  '/oauth/apple',
-  validate(appleOAuthSchema),
-  asyncHandler(async (req, res) => {
-    res.json(await oauthService.appleSignIn(req.body.idToken, req.body.fullName ?? null));
-  }),
-);
 
 // ── Email verification ────────────────────────────────────────────
 router.post(
