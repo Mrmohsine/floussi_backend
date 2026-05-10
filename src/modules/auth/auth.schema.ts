@@ -17,6 +17,10 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const oauthIdTokenSchema = z.object({
+  idToken: z.string().min(20),
+});
+
 export const verifyEmailSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'Code must be 6 digits'),
 });
@@ -55,6 +59,7 @@ export const deleteAccountSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type OAuthIdTokenInput = z.infer<typeof oauthIdTokenSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

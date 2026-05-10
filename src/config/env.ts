@@ -32,6 +32,9 @@ const schema = z.object({
   // Optional — if missing, OTP codes log to stdout instead of being emailed.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('Paycheck <onboarding@resend.dev>'),
+  // Google OAuth client IDs used to verify native Google id_tokens.
+  GOOGLE_OAUTH_WEB_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_IOS_CLIENT_ID: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

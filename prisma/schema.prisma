@@ -43,6 +43,8 @@ model User {
   email           String    @unique
   passwordHash    String
   name            String
+  provider        String?
+  providerSub     String?
   countryCode     String    @default("US")
   currency        String    @default("USD")
   paySchedule     String    @default("BIWEEKLY")
@@ -63,6 +65,9 @@ model User {
   conversations  Conversation[]
   notifications  Notification[]
   oneTimeCodes   OneTimeCode[]
+
+  @@unique([provider, providerSub])
+  @@index([providerSub])
 }
 
 // One-time codes for email verification + password reset.

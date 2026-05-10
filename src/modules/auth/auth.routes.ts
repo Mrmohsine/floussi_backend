@@ -7,6 +7,7 @@ import {
   deleteAccountSchema,
   forgotPasswordSchema,
   loginSchema,
+  oauthIdTokenSchema,
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
@@ -31,6 +32,15 @@ router.post(
   validate(loginSchema),
   asyncHandler(async (req, res) => {
     const result = await service.login(req.body);
+    res.json(result);
+  }),
+);
+
+router.post(
+  '/oauth/google',
+  validate(oauthIdTokenSchema),
+  asyncHandler(async (req, res) => {
+    const result = await service.loginWithGoogle(req.body.idToken);
     res.json(result);
   }),
 );

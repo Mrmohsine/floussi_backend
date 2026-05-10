@@ -1,10 +1,17 @@
+import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
+import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { hashPassword, verifyPassword } from '../../utils/password';
 import { signToken } from '../../utils/jwt';
 import { toNumber } from '../../utils/money';
-import { badRequest, conflict, unauthorized } from '../../utils/errors';
+import {
+  badRequest,
+  conflict,
+  HttpError,
+  unauthorized,
+} from '../../utils/errors';
 import {
   emailPasswordReset,
   emailVerificationCode,
@@ -13,6 +20,8 @@ import {
 import type { LoginInput, RegisterInput } from './auth.schema';
 
 export type CodeKind = 'EMAIL_VERIFY' | 'PASSWORD_RESET';
+
+const googleClient = new OAuth2Client();
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   US: 'USD',
@@ -52,6 +61,42 @@ const publicUser = (u: {
 
 function generateCode(): string {
   return String(Math.floor(100_000 + Math.random() * 900_000));
+}
+
+function googleAudiences() {
+  return [
+    env.GOOGLE_OAUTH_WEB_CLIENT_ID,
+    env.GOOGLE_OAUTH_IOS_CLIENT_ID,
+  ].filter((id): id is string => Boolean(id));
+}
+
+async function verifyGoogleIdToken(idToken: string) {
+  const audiences = googleAudiences();
+  if (audiences.length === 0) {
+    throw new HttpError(503, 'Google sign-in is not configured on the backend.');
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: audiences,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email) {
+      throw unauthorized('Google token is missing account details.');
+    }
+    if (!payload.email_verified) {
+      throw unauthorized('Google email is not verified.');
+    }
+    return {
+      providerSub: payload.sub,
+      email: payload.email.toLowerCase(),
+      name: payload.name || payload.given_name || payload.email.split('@')[0],
+    };
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw unauthorized('Invalid Google sign-in token.');
+  }
 }
 
 // Issue (and persist) a fresh one-time code, replacing any active one,
@@ -155,6 +200,55 @@ export async function login(input: LoginInput) {
 
   const ok = await verifyPassword(input.password, user.passwordHash);
   if (!ok) throw unauthorized('Invalid credentials');
+
+  const token = signToken({ sub: user.id, email: user.email });
+  return { token, user: publicUser(user) };
+}
+
+export async function loginWithGoogle(idToken: string) {
+  const google = await verifyGoogleIdToken(idToken);
+
+  const providerUser = await prisma.user.findFirst({
+    where: { provider: 'google', providerSub: google.providerSub },
+  });
+
+  if (providerUser) {
+    const token = signToken({ sub: providerUser.id, email: providerUser.email });
+    return { token, user: publicUser(providerUser) };
+  }
+
+  const existingEmailUser = await prisma.user.findUnique({
+    where: { email: google.email },
+  });
+
+  if (existingEmailUser) {
+    const user = await prisma.user.update({
+      where: { id: existingEmailUser.id },
+      data: {
+        provider: 'google',
+        providerSub: google.providerSub,
+        emailVerified: true,
+        emailVerifiedAt: existingEmailUser.emailVerifiedAt ?? new Date(),
+      },
+    });
+    const token = signToken({ sub: user.id, email: user.email });
+    return { token, user: publicUser(user) };
+  }
+
+  const passwordHash = await hashPassword(randomBytes(32).toString('hex'));
+  const user = await prisma.user.create({
+    data: {
+      email: google.email,
+      name: google.name,
+      passwordHash,
+      provider: 'google',
+      providerSub: google.providerSub,
+      countryCode: 'US',
+      currency: 'USD',
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+  });
 
   const token = signToken({ sub: user.id, email: user.email });
   return { token, user: publicUser(user) };
