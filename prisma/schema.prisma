@@ -65,6 +65,8 @@ model User {
   conversations  Conversation[]
   notifications  Notification[]
   oneTimeCodes   OneTimeCode[]
+  plaidItems     PlaidItem[]
+  bankTransactions BankTransaction[]
 
   @@unique([provider, providerSub])
   @@index([providerSub])
@@ -308,4 +310,88 @@ model RecurringBill {
   expenses Expense[]
 
   @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Plaid — bank linking. One PlaidItem per linked institution; each item
+// owns 1+ PlaidAccounts. BankTransaction stores the raw synced ledger.
+// ──────────────────────────────────────────────────────────────────────
+
+model PlaidItem {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Plaid's stable identifier for this Item (institution link).
+  plaidItemId     String   @unique
+  // The access_token is bearer-equivalent — treat as a secret.
+  accessToken     String
+  institutionId   String?
+  institutionName String?
+  // Cursor for /transactions/sync incremental pulls.
+  syncCursor      String?
+  lastSyncedAt    DateTime?
+  status          String   @default("ACTIVE") // ACTIVE | NEEDS_REAUTH | REMOVED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  accounts     PlaidAccount[]
+  transactions BankTransaction[]
+
+  @@index([userId])
+}
+
+model PlaidAccount {
+  id               String  @id @default(cuid())
+  itemId           String
+  item             PlaidItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  // Plaid's stable per-account id (account_id).
+  plaidAccountId   String  @unique
+  name             String
+  officialName     String?
+  mask             String?
+  type             String  // depository | credit | loan | investment | other
+  subtype          String? // checking | savings | credit card | etc.
+  balanceCurrent   Decimal?
+  balanceAvailable Decimal?
+  isoCurrencyCode  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions BankTransaction[]
+
+  @@index([itemId])
+}
+
+model BankTransaction {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId              String
+  item                PlaidItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  accountId           String
+  account             PlaidAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Plaid's stable transaction_id — used for upserts during sync.
+  plaidTransactionId  String   @unique
+  // Plaid signs amounts positive = money out, negative = money in.
+  amount              Decimal
+  isoCurrencyCode     String?
+  date                DateTime
+  authorizedDate      DateTime?
+  name                String
+  merchantName        String?
+  // Personal Finance category from Plaid (PRIMARY label).
+  category            String?
+  categoryDetailed    String?
+  pending             Boolean  @default(false)
+  paymentChannel      String?  // online | in store | other
+  // If this transaction has been imported into the user's ledger, the
+  // linked row id. Set during sync so we never double-import.
+  expenseId           String?
+  incomeId            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([accountId, date])
+  @@index([itemId])
 }
