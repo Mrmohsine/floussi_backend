@@ -4,7 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { hashPassword, verifyPassword } from '../../utils/password';
-import { signToken } from '../../utils/jwt';
+import { signRefreshToken, signToken, verifyRefreshToken } from '../../utils/jwt';
 import { toNumber } from '../../utils/money';
 import {
   badRequest,
@@ -22,6 +22,13 @@ import type { LoginInput, RegisterInput } from './auth.schema';
 export type CodeKind = 'EMAIL_VERIFY' | 'PASSWORD_RESET';
 
 const googleClient = new OAuth2Client();
+
+function issueAuthTokens(user: { id: string; email: string }) {
+  return {
+    token: signToken({ sub: user.id, email: user.email }),
+    refreshToken: signRefreshToken({ sub: user.id, email: user.email }),
+  };
+}
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   US: 'USD',
@@ -190,8 +197,7 @@ export async function register(input: RegisterInput) {
     );
   }
 
-  const token = signToken({ sub: user.id, email: user.email });
-  return { token, user: publicUser(user) };
+  return { ...issueAuthTokens(user), user: publicUser(user) };
 }
 
 export async function login(input: LoginInput) {
@@ -201,8 +207,7 @@ export async function login(input: LoginInput) {
   const ok = await verifyPassword(input.password, user.passwordHash);
   if (!ok) throw unauthorized('Invalid credentials');
 
-  const token = signToken({ sub: user.id, email: user.email });
-  return { token, user: publicUser(user) };
+  return { ...issueAuthTokens(user), user: publicUser(user) };
 }
 
 export async function loginWithGoogle(idToken: string) {
@@ -213,8 +218,7 @@ export async function loginWithGoogle(idToken: string) {
   });
 
   if (providerUser) {
-    const token = signToken({ sub: providerUser.id, email: providerUser.email });
-    return { token, user: publicUser(providerUser) };
+    return { ...issueAuthTokens(providerUser), user: publicUser(providerUser) };
   }
 
   const existingEmailUser = await prisma.user.findUnique({
@@ -231,8 +235,7 @@ export async function loginWithGoogle(idToken: string) {
         emailVerifiedAt: existingEmailUser.emailVerifiedAt ?? new Date(),
       },
     });
-    const token = signToken({ sub: user.id, email: user.email });
-    return { token, user: publicUser(user) };
+    return { ...issueAuthTokens(user), user: publicUser(user) };
   }
 
   const passwordHash = await hashPassword(randomBytes(32).toString('hex'));
@@ -250,8 +253,14 @@ export async function loginWithGoogle(idToken: string) {
     },
   });
 
-  const token = signToken({ sub: user.id, email: user.email });
-  return { token, user: publicUser(user) };
+  return { ...issueAuthTokens(user), user: publicUser(user) };
+}
+
+export async function refresh(refreshToken: string) {
+  const payload = verifyRefreshToken(refreshToken);
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) throw unauthorized();
+  return { ...issueAuthTokens(user), user: publicUser(user) };
 }
 
 export async function me(userId: string) {
@@ -328,11 +337,10 @@ export async function resetPassword(email: string, code: string, newPassword: st
     data: { passwordHash },
   });
   // Sign the user in directly so the app skips the login screen.
-  const token = signToken({ sub: updated.id, email: updated.email });
   return {
     ok: true as const,
     message: 'Password reset.',
-    token,
+    ...issueAuthTokens(updated),
     user: publicUser(updated),
   };
 }
@@ -355,12 +363,11 @@ export async function changePassword(
     data: { passwordHash },
   });
 
-  // Issue a fresh access token so the client doesn't keep a stale one.
-  const token = signToken({ sub: updated.id, email: updated.email });
+  // Issue fresh tokens so the client doesn't keep a stale one.
   return {
     ok: true as const,
     message: 'Password updated.',
-    token,
+    ...issueAuthTokens(updated),
     user: publicUser(updated),
   };
 }

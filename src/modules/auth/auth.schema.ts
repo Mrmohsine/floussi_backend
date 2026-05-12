@@ -17,6 +17,10 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const refreshSchema = z.object({
+  refreshToken: z.string().min(20),
+});
+
 export const oauthIdTokenSchema = z.object({
   idToken: z.string().min(20),
 });
@@ -59,6 +63,7 @@ export const deleteAccountSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RefreshInput = z.infer<typeof refreshSchema>;
 export type OAuthIdTokenInput = z.infer<typeof oauthIdTokenSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;

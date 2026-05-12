@@ -8,6 +8,7 @@ import {
   forgotPasswordSchema,
   loginSchema,
   oauthIdTokenSchema,
+  refreshSchema,
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
@@ -33,6 +34,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await service.login(req.body);
     res.json(result);
+  }),
+);
+
+router.post(
+  '/refresh',
+  validate(refreshSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await service.refresh(req.body.refreshToken));
   }),
 );
 
