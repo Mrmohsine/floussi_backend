@@ -36,6 +36,10 @@ const schema = z.object({
   // Google OAuth client IDs used to verify native Google id_tokens.
   GOOGLE_OAUTH_WEB_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_IOS_CLIENT_ID: z.string().optional(),
+  // Plaid — required for bank linking. Routes return 503 if either is missing.
+  PLAID_CLIENT_ID: z.string().optional(),
+  PLAID_SECRET: z.string().optional(),
+  PLAID_ENV: z.enum(['sandbox', 'development', 'production']).default('sandbox'),
 });
 
 const parsed = schema.safeParse(process.env);

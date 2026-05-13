@@ -16,6 +16,7 @@ import insightsRoutes from './modules/insights/insights.routes';
 import chatRoutes from './modules/chat/chat.routes';
 import billingRoutes from './modules/billing/billing.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
+import plaidRoutes from './modules/plaid/plaid.routes';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { rateLimit } from './middleware/rateLimit';
 import { env } from './config/env';
@@ -88,6 +89,7 @@ app.use('/api/insights', insightsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/plaid', plaidRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
